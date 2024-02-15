@@ -17,8 +17,9 @@ void execcmd(struct cmdline *l) {
             int pid = Fork();
             if (pid == 0) { // fils 
                 execvp(cmd[0], cmd);
+                exit(0);
             } else { // père
-                waitpid(-1, NULL, 0);
+                waitpid(pid, NULL, 0);
             }
         }
     }
