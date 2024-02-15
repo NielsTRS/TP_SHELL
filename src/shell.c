@@ -13,10 +13,17 @@ void execcmd(struct cmdline *l) {
         char **cmd = l->seq[i];
         if (strcmp(cmd[0], "quit") == 0) {
             exit(0);
+        } else {
+            int pid = Fork();
+            if (pid == 0) { // fils 
+                execvp(cmd[0], cmd);
+            } else { // père
+                waitpid(-1, NULL, 0);
+            }
         }
-        execvp(cmd[0], cmd);
     }
 }
+
 
 int main() {
     while (1) {
