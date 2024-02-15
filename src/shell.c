@@ -7,7 +7,7 @@ void redirect_in(struct cmdline *l) {
     if (l->in != NULL) {
         int fd_in = open(l->in, O_RDONLY);
         if (fd_in == -1) {
-            fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission denied");
+            fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission refusée");
             exit(EXIT_FAILURE);
         }
         dup2(fd_in, 0);
@@ -38,7 +38,7 @@ void exec_cmd(struct cmdline *l) {
             int pid = Fork();
             if (pid == -1) {
                 perror("Erreur lors de la création du processus fils");
-                exit(1);
+                exit(EXIT_FAILURE);
             } else if (pid == 0) { // fils
                 redirect_in(l);
                 redirect_out(l);
