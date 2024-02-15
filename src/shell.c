@@ -22,7 +22,7 @@ void execcmd(struct cmdline *l) {
                 if (l->in != NULL) {
                     int fd_in = open(l->in, O_RDONLY);
                     if (fd_in == -1) {
-                        perror("Erreur lors de l'ouverture du fichier d'entrée");
+                        fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission denied");
                         exit(1);
                     }
                     dup2(fd_in, 0);
@@ -31,7 +31,7 @@ void execcmd(struct cmdline *l) {
                 if (l->out != NULL) {
                     int fd_out = open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
                     if (fd_out == -1) {
-                        perror("Erreur lors de l'ouverture du fichier de sortie");
+                        fprintf(stderr, "%s: %s\n", l->out, errno == EACCES ? "Permission denied" : "Erreur lors de l'ouverture du fichier de sortie");
                         exit(1);
                     }
                     dup2(fd_out, 1);
@@ -39,6 +39,7 @@ void execcmd(struct cmdline *l) {
                 }
 
                 execvp(cmd[0], cmd);
+                fprintf(stderr, "%s: command not found\n", cmd[0]); // Si execvp échoue
                 exit(0);
             } else { // père
                 waitpid(pid, NULL, 0);
