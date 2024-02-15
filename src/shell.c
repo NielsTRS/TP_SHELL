@@ -10,7 +10,7 @@ void redirect_in(struct cmdline *l) {
             fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission refusée");
             exit(EXIT_FAILURE);
         }
-        dup2(fd_in, 0);
+        Dup2(fd_in, 0);
         close(fd_in);
     }
 }
@@ -23,7 +23,7 @@ void redirect_out(struct cmdline *l) {
                     errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
             exit(EXIT_FAILURE);
         }
-        dup2(fd_out, 1);
+        Dup2(fd_out, 1);
         close(fd_out);
     }
 }
