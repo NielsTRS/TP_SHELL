@@ -1,7 +1,3 @@
-/*
- * Copyright (C) 2002, Simon Nieuviarts
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include "readcmd.h"
@@ -12,7 +8,7 @@ void redirect_in(struct cmdline *l) {
         int fd_in = open(l->in, O_RDONLY);
         if (fd_in == -1) {
             fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission denied");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         dup2(fd_in, 0);
         close(fd_in);
@@ -24,8 +20,8 @@ void redirect_out(struct cmdline *l) {
         int fd_out = open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
             fprintf(stderr, "%s: %s\n", l->out,
-                    errno == EACCES ? "Permission denied" : "Erreur lors de l'ouverture du fichier de sortie");
-            exit(1);
+                    errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
+            exit(EXIT_FAILURE);
         }
         dup2(fd_out, 1);
         close(fd_out);
@@ -37,7 +33,7 @@ void exec_cmd(struct cmdline *l) {
         char **cmd = l->seq[i];
 
         if (strcmp(cmd[0], "quit") == 0) { // commande intégrée au shell
-            exit(0);
+            exit(EXIT_SUCCESS);
         } else { // commande à exécuter
             int pid = Fork();
             if (pid == -1) {
@@ -48,9 +44,9 @@ void exec_cmd(struct cmdline *l) {
                 redirect_out(l);
 
                 execvp(cmd[0], cmd);
-                fprintf(stderr, "%s: command not found\n", cmd[0]); // Si execvp échoue
+                fprintf(stderr, "%s: commande non trouvée\n", cmd[0]); // Si execvp échoue
 
-                exit(0);
+                exit(EXIT_FAILURE);
             } else { // père
                 waitpid(pid, NULL, 0);
             }
@@ -68,7 +64,7 @@ int main() {
         /* If input stream closed, normal termination */
         if (!l) {
             printf("exit\n");
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
 
         if (l->err) {
