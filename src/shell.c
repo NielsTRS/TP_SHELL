@@ -10,6 +10,14 @@ void exec_shell_cmd(struct cmdline *l) {
     }
 }
 
+int count_cmd(struct cmdline *l) {
+    int nb = 0;
+    while (l->seq[nb]) {
+        nb++;
+    }
+    return nb;
+}
+
 void redirect_in(struct cmdline *l) {
     if (l->in != NULL) {
         int fd_in = Open(l->in, O_RDONLY, 0644);
@@ -27,7 +35,7 @@ void redirect_out(struct cmdline *l) {
         int fd_out = Open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
             fprintf(stderr, "%s: %s\n", l->out,
-                    errno == EACCES ? "Permission refusée" : "Fichier inexistant");
+                    errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
             exit(EXIT_FAILURE);
         }
         Dup2(fd_out, 1);
@@ -36,15 +44,33 @@ void redirect_out(struct cmdline *l) {
 }
 
 void exec_cmd(struct cmdline *l) {
-    for (int i = 0; l->seq[i] != 0; i++) {
-        char **cmd = l->seq[i];
-        redirect_in(l);
-        redirect_out(l);
+    int nb = count_cmd(l);
+    pid_t *pids = malloc(sizeof(pid_t) * nb);
+    int **pipes = malloc(sizeof(int) * nb - 1);
 
-        execvp(cmd[0], cmd); // si ok, alors tue le processus
+    for (int i = 0; i < nb - 1; i++) {
+        pipes[i] = malloc(sizeof(int) * 2);
+    }
 
-        fprintf(stderr, "%s: commande non trouvée\n", cmd[0]); // Si execvp échoue
-        exit(EXIT_FAILURE);
+    for (int i = 0; i < nb; i++) {
+        pids[i] = Fork();
+
+        if (pids[i] == -1) {
+            perror("Erreur lors de la création du processus fils");
+            exit(EXIT_FAILURE);
+        }
+
+        if (pids[i] == 0) {
+            char **cmd = l->seq[i];
+            redirect_in(l);
+            redirect_out(l);
+            execvp(cmd[0], cmd);
+
+            fprintf(stderr, "%s: commande non trouvée\n", cmd[0]); // Si execvp échoue
+            exit(EXIT_FAILURE);
+        } else {
+            waitpid(pids[i], NULL, 0);
+        }
     }
 }
 
@@ -68,18 +94,6 @@ int main() {
         }
 
         exec_shell_cmd(l);
-
-        int pid = Fork();
-
-        if (pid == -1) {
-            perror("Erreur lors de la création du processus fils");
-            exit(EXIT_FAILURE);
-        }
-
-        if (pid == 0) { // fils
-            exec_cmd(l);
-        } else { // père
-            waitpid(pid, NULL, 0);
-        }
+        exec_cmd(l);
     }
 }
