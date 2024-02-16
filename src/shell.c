@@ -22,7 +22,7 @@ void redirect_in(struct cmdline *l) {
     if (l->in != NULL) {
         int fd_in = Open(l->in, O_RDONLY, 0644);
         if (fd_in == -1) {
-            fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission refusée");
+            perror(l->in);
             exit(EXIT_FAILURE);
         }
         Dup2(fd_in, 0);
@@ -34,8 +34,7 @@ void redirect_out(struct cmdline *l) {
     if (l->out != NULL) {
         int fd_out = Open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
-            fprintf(stderr, "%s: %s\n", l->out,
-                    errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
+            perror(l->out);
             exit(EXIT_FAILURE);
         }
         Dup2(fd_out, 1);
@@ -70,7 +69,7 @@ void exec_cmd(struct cmdline *l) {
                     perror("Erreur lors de la redirection de l'entrée");
                     exit(EXIT_FAILURE);
                 }
-            } else {
+            } else { // première commande
                 redirect_in(l);
             }
 
@@ -79,7 +78,7 @@ void exec_cmd(struct cmdline *l) {
                     perror("Erreur lors de la redirection de la sortie");
                     exit(EXIT_FAILURE);
                 }
-            } else {
+            } else { // dernière commande
                 redirect_out(l);
             }
 
@@ -87,7 +86,7 @@ void exec_cmd(struct cmdline *l) {
                 close(pipes[j][0]);
                 close(pipes[j][1]);
             }
-        
+
             char **cmd = l->seq[i];
             if (execvp(cmd[0], cmd) == -1) {
                 perror(cmd[0]);
