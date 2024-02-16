@@ -27,7 +27,7 @@ void redirect_out(struct cmdline *l) {
         int fd_out = Open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
             fprintf(stderr, "%s: %s\n", l->out,
-                    errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
+                    errno == EACCES ? "Permission refusée" : "Fichier inexistant");
             exit(EXIT_FAILURE);
         }
         Dup2(fd_out, 1);
@@ -41,7 +41,7 @@ void exec_cmd(struct cmdline *l) {
         redirect_in(l);
         redirect_out(l);
 
-        execvp(cmd[0], cmd);
+        execvp(cmd[0], cmd); // si ok, alors tue le processus
 
         fprintf(stderr, "%s: commande non trouvée\n", cmd[0]); // Si execvp échoue
         exit(EXIT_FAILURE);
