@@ -22,7 +22,7 @@ void redirect_in(struct cmdline *l) {
     if (l->in != NULL) {
         int fd_in = Open(l->in, O_RDONLY, 0644);
         if (fd_in == -1) {
-            perror(l->in);
+            fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission refusée");
             exit(EXIT_FAILURE);
         }
         Dup2(fd_in, 0);
@@ -34,7 +34,8 @@ void redirect_out(struct cmdline *l) {
     if (l->out != NULL) {
         int fd_out = Open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
-            perror(l->out);
+            fprintf(stderr, "%s: %s\n", l->out,
+                    errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
             exit(EXIT_FAILURE);
         }
         Dup2(fd_out, 1);
@@ -44,14 +45,15 @@ void redirect_out(struct cmdline *l) {
 
 void exec_cmd(struct cmdline *l) {
     int nb = count_cmd(l);
-
-    // allocation de la mémoire
     pid_t *pids = malloc(sizeof(pid_t) * nb);
     int **pipes = malloc(sizeof(int) * nb - 1);
 
     for (int i = 0; i < nb - 1; i++) {
         pipes[i] = malloc(sizeof(int) * 2);
-        pipe(pipes[i]);
+        if (pipe(pipes[i]) < 0) {
+            perror("Erreur lors de la création du tube");
+            exit(EXIT_FAILURE);
+        }
     }
 
     for (int i = 0; i < nb; i++) {
@@ -62,27 +64,47 @@ void exec_cmd(struct cmdline *l) {
             exit(EXIT_FAILURE);
         }
 
-        if (pids[i] == 0) { // fils
-            char **cmd = l->seq[i];
-            if (i == 0) { // première commande
+        if (pids[i] == 0) {
+            if (i != 0) {
+                if (dup2(pipes[i - 1][0], STDIN_FILENO) < 0) {
+                    perror("Erreur lors de la redirection de l'entrée");
+                    exit(EXIT_FAILURE);
+                }
+            } else {
                 redirect_in(l);
             }
 
-            if (i == nb - 1) { // dernière commande
+            if (i != nb - 1) {
+                if (dup2(pipes[i][1], STDOUT_FILENO) < 0) {
+                    perror("Erreur lors de la redirection de la sortie");
+                    exit(EXIT_FAILURE);
+                }
+            } else {
                 redirect_out(l);
             }
 
+            for (int j = 0; j < nb - 1; j++) {
+                close(pipes[j][0]);
+                close(pipes[j][1]);
+            }
+        
+            char **cmd = l->seq[i];
             if (execvp(cmd[0], cmd) == -1) {
                 perror(cmd[0]);
                 exit(EXIT_FAILURE);
             }
-
-        } else { // père
-            waitpid(pids[i], NULL, 0);
         }
     }
 
-    // libération de la mémoire
+    for (int i = 0; i < nb - 1; i++) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+
+    for (int i = 0; i < nb; i++) {
+        waitpid(pids[i], NULL, 0);
+    }
+
     free(pids);
     for (int i = 0; i < nb - 1; i++) {
         free(pipes[i]);
