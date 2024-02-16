@@ -22,7 +22,7 @@ void redirect_in(struct cmdline *l) {
     if (l->in != NULL) {
         int fd_in = Open(l->in, O_RDONLY, 0644);
         if (fd_in == -1) {
-            fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission refusée");
+            perror(l->in);
             exit(EXIT_FAILURE);
         }
         Dup2(fd_in, 0);
@@ -34,8 +34,7 @@ void redirect_out(struct cmdline *l) {
     if (l->out != NULL) {
         int fd_out = Open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
-            fprintf(stderr, "%s: %s\n", l->out,
-                    errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
+            perror(l->out);
             exit(EXIT_FAILURE);
         }
         Dup2(fd_out, 1);
@@ -45,11 +44,14 @@ void redirect_out(struct cmdline *l) {
 
 void exec_cmd(struct cmdline *l) {
     int nb = count_cmd(l);
+
+    // allocation de la mémoire
     pid_t *pids = malloc(sizeof(pid_t) * nb);
     int **pipes = malloc(sizeof(int) * nb - 1);
 
     for (int i = 0; i < nb - 1; i++) {
         pipes[i] = malloc(sizeof(int) * 2);
+        pipe(pipes[i]);
     }
 
     for (int i = 0; i < nb; i++) {
@@ -60,18 +62,32 @@ void exec_cmd(struct cmdline *l) {
             exit(EXIT_FAILURE);
         }
 
-        if (pids[i] == 0) {
+        if (pids[i] == 0) { // fils
             char **cmd = l->seq[i];
-            redirect_in(l);
-            redirect_out(l);
-            execvp(cmd[0], cmd);
+            if (i == 0) { // première commande
+                redirect_in(l);
+            }
 
-            fprintf(stderr, "%s: commande non trouvée\n", cmd[0]); // Si execvp échoue
-            exit(EXIT_FAILURE);
-        } else {
+            if (i == nb - 1) { // dernière commande
+                redirect_out(l);
+            }
+
+            if (execvp(cmd[0], cmd) == -1) {
+                perror(cmd[0]);
+                exit(EXIT_FAILURE);
+            }
+
+        } else { // père
             waitpid(pids[i], NULL, 0);
         }
     }
+
+    // libération de la mémoire
+    free(pids);
+    for (int i = 0; i < nb - 1; i++) {
+        free(pipes[i]);
+    }
+    free(pipes);
 }
 
 int main() {
