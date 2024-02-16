@@ -12,26 +12,26 @@ void exec_shell_cmd(struct cmdline *l) {
 
 void redirect_in(struct cmdline *l) {
     if (l->in != NULL) {
-        int fd_in = open(l->in, O_RDONLY);
+        int fd_in = Open(l->in, O_RDONLY, 0644);
         if (fd_in == -1) {
             fprintf(stderr, "%s: %s\n", l->in, errno == ENOENT ? "Fichier inexistant" : "Permission refusée");
             exit(EXIT_FAILURE);
         }
         Dup2(fd_in, 0);
-        close(fd_in);
+        Close(fd_in);
     }
 }
 
 void redirect_out(struct cmdline *l) {
     if (l->out != NULL) {
-        int fd_out = open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        int fd_out = Open(l->out, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd_out == -1) {
             fprintf(stderr, "%s: %s\n", l->out,
                     errno == EACCES ? "Permission refusée" : "Erreur lors de l'ouverture du fichier de sortie");
             exit(EXIT_FAILURE);
         }
         Dup2(fd_out, 1);
-        close(fd_out);
+        Close(fd_out);
     }
 }
 
