@@ -3,6 +3,13 @@
 #include "readcmd.h"
 #include "csapp.h"
 
+void exec_shell_cmd(struct cmdline *l) {
+    char **cmd = l->seq[0];
+    if (strcmp(cmd[0], "quit") == 0) { // commande intégrée au shell
+        exit(EXIT_SUCCESS);
+    }
+}
+
 void redirect_in(struct cmdline *l) {
     if (l->in != NULL) {
         int fd_in = open(l->in, O_RDONLY);
@@ -31,26 +38,13 @@ void redirect_out(struct cmdline *l) {
 void exec_cmd(struct cmdline *l) {
     for (int i = 0; l->seq[i] != 0; i++) {
         char **cmd = l->seq[i];
+        redirect_in(l);
+        redirect_out(l);
 
-        if (strcmp(cmd[0], "quit") == 0) { // commande intégrée au shell
-            exit(EXIT_SUCCESS);
-        } else { // commande à exécuter
-            int pid = Fork();
-            if (pid == -1) {
-                perror("Erreur lors de la création du processus fils");
-                exit(EXIT_FAILURE);
-            } else if (pid == 0) { // fils
-                redirect_in(l);
-                redirect_out(l);
+        execvp(cmd[0], cmd);
 
-                execvp(cmd[0], cmd);
-                fprintf(stderr, "%s: commande non trouvée\n", cmd[0]); // Si execvp échoue
-
-                exit(EXIT_FAILURE);
-            } else { // père
-                waitpid(pid, NULL, 0);
-            }
-        }
+        fprintf(stderr, "%s: commande non trouvée\n", cmd[0]); // Si execvp échoue
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -73,6 +67,19 @@ int main() {
             continue;
         }
 
-        exec_cmd(l);
+        exec_shell_cmd(l);
+
+        int pid = Fork();
+
+        if (pid == -1) {
+            perror("Erreur lors de la création du processus fils");
+            exit(EXIT_FAILURE);
+        }
+
+        if (pid == 0) { // fils
+            exec_cmd(l);
+        } else { // père
+            waitpid(pid, NULL, 0);
+        }
     }
 }
