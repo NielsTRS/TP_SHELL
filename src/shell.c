@@ -3,6 +3,12 @@
 #include "readcmd.h"
 #include "csapp.h"
 
+void handler(int sig) /* handler */
+{
+    while (waitpid(-1, NULL, WNOHANG) > 0) {
+    }
+}
+
 void exec_shell_cmd(struct cmdline *l) {
     char **cmd = l->seq[0];
     if (strcmp(cmd[0], "quit") == 0) { // commande intégrée au shell
@@ -112,6 +118,8 @@ void exec_cmd(struct cmdline *l) {
 }
 
 int main() {
+    Signal(SIGCHLD, handler);
+
     while (1) {
         struct cmdline *l;
 
