@@ -5,7 +5,7 @@
 
 void handler(int sig) /* handler */
 {
-    while (waitpid(-1, NULL, WNOHANG) > 0) {
+    while (waitpid(-1, NULL, WNOHANG | WUNTRACED) > 0) {
     }
 }
 
@@ -88,15 +88,19 @@ void exec_cmd(struct cmdline *l) {
                 redirect_out(l);
             }
 
-            for (int j = 0; j < nb - 1; j++) {
-                close(pipes[j][0]);
-                close(pipes[j][1]);
+            for (int i = 0; i < nb - 1; i++) {
+                close(pipes[i][0]);
+                close(pipes[i][1]);
             }
 
             char **cmd = l->seq[i];
             if (execvp(cmd[0], cmd) == -1) {
                 perror(cmd[0]);
                 exit(EXIT_FAILURE);
+            }
+        } else {
+            if (l->bg) {
+                printf("[%d] %d\n", i + 1, pids[i]);
             }
         }
     }
@@ -107,7 +111,9 @@ void exec_cmd(struct cmdline *l) {
     }
 
     for (int i = 0; i < nb; i++) {
-        waitpid(pids[i], NULL, 0);
+        if (!l->bg) {
+            waitpid(pids[i], NULL, 0);
+        }
     }
 
     free(pids);
