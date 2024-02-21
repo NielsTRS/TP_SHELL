@@ -3,10 +3,18 @@
 #include "readcmd.h"
 #include "csapp.h"
 
-void handler(int sig) /* handler */
+void handler_chld(int sig) /* handler */
 {
     while (waitpid(-1, NULL, WNOHANG | WUNTRACED) > 0) {
     }
+}
+
+void handler_stop(int sig) {
+    printf("\nCtrl+C\n");
+}
+
+void handler_suspend(int sig) {
+    printf("\nCtrl+Z\n");
 }
 
 void exec_shell_cmd(struct cmdline *l) {
@@ -124,7 +132,9 @@ void exec_cmd(struct cmdline *l) {
 }
 
 int main() {
-    Signal(SIGCHLD, handler);
+    Signal(SIGCHLD, handler_chld);
+    Signal(SIGINT, handler_stop);
+    Signal(SIGTSTP, handler_suspend);
 
     while (1) {
         struct cmdline *l;
