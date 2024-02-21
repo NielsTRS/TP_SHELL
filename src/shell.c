@@ -3,15 +3,32 @@
 #include "readcmd.h"
 #include "csapp.h"
 
-void handler_chld(int sig) /* handler */
-{
-    while (waitpid(-1, NULL, WNOHANG | WUNTRACED) > 0) {
+pid_t *fg_pids;
+int nb_fg_pids = 0;
+
+void handler_chld(int sig) {
+    pid_t pid;
+    while ((pid = waitpid(-1, NULL, WNOHANG | WUNTRACED)) > 0) {
+        // suppresion des processus déja fini
+        for (int i = 0; i < nb_fg_pids; i++) {
+            if (fg_pids[i] == pid) {
+                for (int j = i; j < nb_fg_pids - 1; j++) {
+                    fg_pids[j] = fg_pids[j + 1];
+                }
+                nb_fg_pids--;
+                break;
+            }
+        }
     }
 }
 
 void handler_stop(int sig) {
-    printf("\nCtrl+C\n");
+    printf("\nCtrl+C %d\n", nb_fg_pids);
+    for (int i = 0; i < nb_fg_pids; i++) {
+        printf("[%d] %d\n", i + 1, fg_pids[i]);
+    }
 }
+
 
 void handler_suspend(int sig) {
     printf("\nCtrl+Z\n");
@@ -97,8 +114,8 @@ void exec_cmd(struct cmdline *l) {
             }
 
             for (int i = 0; i < nb - 1; i++) {
-                close(pipes[i][0]);
-                close(pipes[i][1]);
+                Close(pipes[i][0]);
+                Close(pipes[i][1]);
             }
 
             char **cmd = l->seq[i];
@@ -109,17 +126,20 @@ void exec_cmd(struct cmdline *l) {
         } else {
             if (l->bg) {
                 printf("[%d] %d\n", i + 1, pids[i]);
+            } else {
+                fg_pids = realloc(fg_pids, (nb_fg_pids + 1) * sizeof(pid_t));
+                fg_pids[nb_fg_pids++] = pids[i];
             }
         }
     }
 
     for (int i = 0; i < nb - 1; i++) {
-        close(pipes[i][0]);
-        close(pipes[i][1]);
+        Close(pipes[i][0]);
+        Close(pipes[i][1]);
     }
 
-    for (int i = 0; i < nb; i++) {
-        if (!l->bg) {
+    if (!l->bg) {
+        for (int i = 0; i < nb; i++) {
             waitpid(pids[i], NULL, 0);
         }
     }
@@ -138,6 +158,7 @@ int main() {
 
     while (1) {
         struct cmdline *l;
+        nb_fg_pids = 0;
 
         printf("shell> ");
         l = readcmd();
