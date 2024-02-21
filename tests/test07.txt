@@ -1,0 +1,5 @@
+#
+# test07.txt - Signaux
+#
+sleep 10 | sleep 10
+INT

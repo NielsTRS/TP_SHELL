@@ -1,0 +1,5 @@
+#
+# test05.txt - Redirection
+#
+ls > toto.txt
+cat < toto.txt > toto2.txt
