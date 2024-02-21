@@ -26,6 +26,7 @@ void handler_stop(int sig) {
     printf("\nCtrl+C %d\n", nb_fg_pids);
     for (int i = 0; i < nb_fg_pids; i++) {
         printf("[%d] %d\n", i + 1, fg_pids[i]);
+        Kill(fg_pids[i], SIGINT);
     }
 }
 
