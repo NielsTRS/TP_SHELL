@@ -100,7 +100,7 @@ void exec_cmd(struct cmdline *l) {
             exit(EXIT_FAILURE);
         }
 
-        if (pids[i] == 0) {
+        if (pids[i] == 0) { // fils
             if (i != 0) { // pas la première commande
                 Close(pipes[i - 1][1]);
                 if (Dup2(pipes[i - 1][0], STDIN_FILENO) < 0) {
@@ -132,7 +132,7 @@ void exec_cmd(struct cmdline *l) {
                 perror(cmd[0]);
                 exit(EXIT_FAILURE);
             }
-        } else {
+        } else { // père
             if (l->bg) {
                 printf("[%d] %d\n", i + 1, pids[i]);
                 bg_pids = realloc(bg_pids, (nb_bg_pids + 1) * sizeof(pid_t));
@@ -141,7 +141,8 @@ void exec_cmd(struct cmdline *l) {
         }
     }
 
-    // A REVOIR !!!
+    // père
+
     for (int i = 0; i < nb - 1; i++) {
         Close(pipes[i][0]);
         Close(pipes[i][1]);
@@ -154,6 +155,7 @@ void exec_cmd(struct cmdline *l) {
         }
     }
 
+    // libération de la mémoire
     free(pids);
     for (int i = 0; i < nb - 1; i++) {
         free(pipes[i]);
