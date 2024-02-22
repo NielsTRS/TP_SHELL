@@ -10,7 +10,7 @@ void handler_chld(int sig) {
     pid_t pid;
     int status;
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
-        // suppresion des processus déja fini
+        // suppresion des processus déja fini (pose problème avec synchronisation)
         for (int i = 0; i < nb_bg_pids; i++) {
             if (bg_pids[i] == pid) {
                 for (int j = i; j < nb_bg_pids - 1; j++) {
