@@ -3,9 +3,23 @@
 #include "readcmd.h"
 #include "csapp.h"
 
+pid_t *bg_pids;
+int nb_bg_pids = 0;
 
 void handler_chld(int sig) {
-    while ((waitpid(-1, NULL, WNOHANG | WUNTRACED)) > 0) {
+    pid_t pid;
+    int status;
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
+        // suppresion des processus déja fini
+        for (int i = 0; i < nb_bg_pids; i++) {
+            if (bg_pids[i] == pid) {
+                for (int j = i; j < nb_bg_pids - 1; j++) {
+                    bg_pids[j] = bg_pids[j + 1];
+                }
+                nb_bg_pids--;
+                break;
+            }
+        }
     }
 }
 
@@ -18,11 +32,19 @@ void handler_suspend(int sig) {
     printf("\n");
 }
 
-void exec_shell_cmd(struct cmdline *l) {
+int exec_shell_cmd(struct cmdline *l) {
     char **cmd = l->seq[0];
     if (strcmp(cmd[0], "quit") == 0) { // commande intégrée au shell
         exit(EXIT_SUCCESS);
     }
+    if (strcmp(cmd[0], "jobs") == 0) {
+        printf("\n%d processus en arrière plan\n", nb_bg_pids);
+        for (int i = 0; i < nb_bg_pids; i++) {
+            printf("[%d] %d\n", i + 1, bg_pids[i]);
+        }
+        return 1;
+    }
+    return 0;
 }
 
 int count_cmd(struct cmdline *l) {
@@ -114,6 +136,8 @@ void exec_cmd(struct cmdline *l) {
         } else {
             if (l->bg) {
                 printf("[%d] %d\n", i + 1, pids[i]);
+                bg_pids = realloc(bg_pids, (nb_bg_pids + 1) * sizeof(pid_t));
+                bg_pids[nb_bg_pids++] = pids[i];
             }
         }
     }
@@ -149,6 +173,7 @@ int main() {
 
         /* If input stream closed, normal termination */
         if (!l) {
+            free(bg_pids);
             printf("exit\n");
             exit(EXIT_SUCCESS);
         }
@@ -159,7 +184,8 @@ int main() {
             continue;
         }
 
-        exec_shell_cmd(l);
-        exec_cmd(l);
+        if (exec_shell_cmd(l) == 0) {
+            exec_cmd(l);
+        }
     }
 }
