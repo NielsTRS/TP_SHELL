@@ -102,7 +102,7 @@ void exec_cmd(struct cmdline *l) {
 
         if (pids[i] == 0) {
             if (i != 0) {
-                if (dup2(pipes[i - 1][0], STDIN_FILENO) < 0) {
+                if (Dup2(pipes[i - 1][0], STDIN_FILENO) < 0) {
                     perror("Erreur lors de la redirection de l'entrée");
                     exit(EXIT_FAILURE);
                 }
@@ -111,7 +111,7 @@ void exec_cmd(struct cmdline *l) {
             }
 
             if (i != nb - 1) {
-                if (dup2(pipes[i][1], STDOUT_FILENO) < 0) {
+                if (Dup2(pipes[i][1], STDOUT_FILENO) < 0) {
                     perror("Erreur lors de la redirection de la sortie");
                     exit(EXIT_FAILURE);
                 }
