@@ -119,7 +119,7 @@ void exec_cmd(struct cmdline *l) {
                 redirect_out(l);
             }
 
-            if (i != nb - 1) { // nb-1 pipes
+            for (int i = 0; i < nb - 1; i++) {
                 Close(pipes[i][0]);
                 Close(pipes[i][1]);
             }
