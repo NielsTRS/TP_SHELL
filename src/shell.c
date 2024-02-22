@@ -101,7 +101,7 @@ void exec_cmd(struct cmdline *l) {
         }
 
         if (pids[i] == 0) {
-            if (i != 0) {
+            if (i != 0) { // pas la première commande
                 if (Dup2(pipes[i - 1][0], STDIN_FILENO) < 0) {
                     perror("Erreur lors de la redirection de l'entrée");
                     exit(EXIT_FAILURE);
@@ -110,7 +110,7 @@ void exec_cmd(struct cmdline *l) {
                 redirect_in(l);
             }
 
-            if (i != nb - 1) {
+            if (i != nb - 1) { // pas la dernière commande
                 if (Dup2(pipes[i][1], STDOUT_FILENO) < 0) {
                     perror("Erreur lors de la redirection de la sortie");
                     exit(EXIT_FAILURE);
@@ -119,12 +119,13 @@ void exec_cmd(struct cmdline *l) {
                 redirect_out(l);
             }
 
-            for (int i = 0; i < nb - 1; i++) {
+            if (i != nb - 1) { // nb-1 pipes
                 Close(pipes[i][0]);
                 Close(pipes[i][1]);
             }
 
-            if (l->bg) {
+            // changement de groupe
+            if(l->bg){
                 Setpgid(0, 0);
             }
 
@@ -142,6 +143,7 @@ void exec_cmd(struct cmdline *l) {
         }
     }
 
+    // fermeture des pipes
     for (int i = 0; i < nb - 1; i++) {
         Close(pipes[i][0]);
         Close(pipes[i][1]);
