@@ -67,6 +67,28 @@ int exec_shell_cmd(struct cmdline *l) {
         pthread_mutex_unlock(&bg_pids_mutex);
         return 1;
     }
+    if (strcmp(cmd[0], "stop") == 0) {
+        pid_t pid_to_stop;
+        if (strncmp(cmd[1], "%", 1) == 0) { // cas de % donc id du job
+            int job_id = atoi(cmd[1] + 1);
+            if (job_id > 0 && job_id <= nb_bg_pids) {
+                for (int i = 0; i < job_id; i++) {
+                    pid_to_stop = bg_processes[i].pid;
+                }
+            } else {
+                printf("Identifiant invalide\n");
+            }
+        } else { // cas du pid
+            pid_to_stop = atoi(cmd[1]);
+        }
+
+        if (kill(pid_to_stop, SIGTERM) == 0) {
+            printf("Arrêt du processus %d en arrière-plan\n", pid_to_stop);
+        } else {
+            perror("kill");
+        }
+        return 1;
+    }
     return 0;
 }
 
@@ -166,7 +188,7 @@ void exec_cmd(struct cmdline *l) {
         } else { // père
             if (l->bg) {
                 pthread_mutex_lock(&bg_pids_mutex);
-                printf("[%d] %d\n", i + 1, pids[i]);
+                printf("[%d] %d\n", nb_bg_pids + 1, pids[i]);
 
                 char **cmd = l->seq[i];
                 int cmd_length = cmd_size(cmd);
