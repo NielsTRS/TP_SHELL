@@ -12,10 +12,15 @@ typedef struct {
     int state;
     char **command;
     int cmd_size;
-} BackgroundProcess;
+} Process;
 
-BackgroundProcess *bg_processes;
-int nb_bg_pids;
+typedef struct {
+    Process *processes;
+    int nb;
+} ProcessesList;
+
+ProcessesList *bg_processes;
+
 pthread_mutex_t bg_pids_mutex;
 
 void handler_chld(int sig) {
@@ -24,9 +29,9 @@ void handler_chld(int sig) {
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
         pthread_mutex_lock(&bg_pids_mutex);
         // mises à jours
-        for (int i = 0; i < nb_bg_pids; i++) {
-            if (bg_processes[i].pid == pid) {
-                bg_processes[i].state = FINISHED_STATE;
+        for (int i = 0; i < bg_processes->nb; i++) {
+            if (bg_processes->processes[i].pid == pid) {
+                bg_processes->processes[i].state = FINISHED_STATE;
             }
         }
         pthread_mutex_unlock(&bg_pids_mutex);
@@ -49,16 +54,16 @@ int exec_shell_cmd(struct cmdline *l) {
     }
     if (strcmp(cmd[0], "jobs") == 0) {
         pthread_mutex_lock(&bg_pids_mutex);
-        for (int i = 0; i < nb_bg_pids; i++) {
-            printf("[%d] %d", i + 1, bg_processes[i].pid);
-            if (bg_processes[i].state) {
+        for (int i = 0; i < bg_processes->nb; i++) {
+            printf("[%d] %d", i + 1, bg_processes->processes[i].pid);
+            if (bg_processes->processes[i].state == RUNNING_STATE) {
                 printf(" En cours d'éxécution ");
             } else {
                 printf(" Arrêté ");
             }
 
-            char **c = bg_processes[i].command;
-            for (int j = 0; j < bg_processes[i].cmd_size; j++) {
+            char **c = bg_processes->processes[i].command;
+            for (int j = 0; j < bg_processes->processes[i].cmd_size; j++) {
                 printf("%s ", c[j]);
             }
 
@@ -72,9 +77,9 @@ int exec_shell_cmd(struct cmdline *l) {
         pid_t pid_to_stop;
         if (strncmp(cmd[1], "%", 1) == 0) { // cas de % donc id du job
             int job_id = atoi(cmd[1] + 1);
-            if (job_id > 0 && job_id <= nb_bg_pids) {
+            if (job_id > 0 && job_id <= bg_processes->nb) {
                 for (int i = 0; i < job_id; i++) {
-                    pid_to_stop = bg_processes[i].pid;
+                    pid_to_stop = bg_processes->processes[i].pid;
                 }
             } else {
                 printf("Identifiant invalide\n");
@@ -190,24 +195,25 @@ void exec_cmd(struct cmdline *l) {
         } else { // père
             if (l->bg) {
                 pthread_mutex_lock(&bg_pids_mutex);
-                printf("[%d] %d\n", nb_bg_pids + 1, pids[i]);
+                printf("[%d] %d\n", bg_processes->nb + 1, pids[i]);
 
                 char **cmd = l->seq[i];
                 int cmd_length = cmd_size(cmd);
 
-                bg_processes = realloc(bg_processes, (nb_bg_pids + 1) * sizeof(BackgroundProcess));
-                bg_processes[nb_bg_pids].command = malloc((cmd_length + 1) * sizeof(char *));
+                bg_processes->processes = realloc(bg_processes->processes, (bg_processes->nb + 1) * sizeof(Process));
+                bg_processes->processes[bg_processes->nb].command = malloc((cmd_length + 1) * sizeof(char *));
 
-                bg_processes[nb_bg_pids].pid = pids[i];
-                bg_processes[nb_bg_pids].state = RUNNING_STATE;
-                bg_processes[nb_bg_pids].cmd_size = cmd_length;
+                bg_processes->processes[bg_processes->nb].pid = pids[i];
+                bg_processes->processes[bg_processes->nb].pid = pids[i];
+                bg_processes->processes[bg_processes->nb].state = RUNNING_STATE;
+                bg_processes->processes[bg_processes->nb].cmd_size = cmd_length;
 
                 for (int j = 0; j < cmd_length; j++) {
-                    bg_processes[nb_bg_pids].command[j] = strdup(cmd[j]);
+                    bg_processes->processes[bg_processes->nb].command[j] = strdup(cmd[j]);
                 }
-                bg_processes[nb_bg_pids].command[cmd_length] = NULL;
+                bg_processes->processes[bg_processes->nb].command[cmd_length] = NULL;
 
-                nb_bg_pids++;
+                bg_processes->nb++;
                 pthread_mutex_unlock(&bg_pids_mutex);
             }
         }
@@ -240,8 +246,11 @@ int main() {
     Signal(SIGINT, handler_stop);
     Signal(SIGTSTP, handler_suspend);
 
+    bg_processes = malloc(sizeof(ProcessesList));
+    bg_processes->nb = 0;
+
     pthread_mutex_init(&bg_pids_mutex, NULL);
-    nb_bg_pids = 0;
+
 
     while (1) {
         struct cmdline *l;
@@ -253,14 +262,15 @@ int main() {
         if (!l) {
             pthread_mutex_destroy(&bg_pids_mutex);
 
-            for (int i = 0; i < nb_bg_pids; i++) {
-                for (int j = 0; j < bg_processes[i].cmd_size; j++) {
-                    free(bg_processes[i].command[j]);
+            for (int i = 0; i < bg_processes->nb; i++) {
+                for (int j = 0; j < bg_processes->processes[i].cmd_size; j++) {
+                    free(bg_processes->processes[i].command[j]);
                 }
 
-                free(bg_processes[i].command);
+                free(bg_processes->processes[i].command);
             }
 
+            free(bg_processes->processes);
             free(bg_processes);
             printf("exit\n");
             exit(EXIT_SUCCESS);
