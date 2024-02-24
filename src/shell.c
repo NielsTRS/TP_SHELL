@@ -17,24 +17,24 @@ typedef struct {
 typedef struct {
     Process *processes;
     int nb;
+    pthread_mutex_t mutex;
 } ProcessesList;
 
 ProcessesList *bg_processes;
 
-pthread_mutex_t bg_pids_mutex;
 
 void handler_chld(int sig) {
     pid_t pid;
     int status;
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
-        pthread_mutex_lock(&bg_pids_mutex);
+        pthread_mutex_lock(&bg_processes->mutex);
         // mises à jours
         for (int i = 0; i < bg_processes->nb; i++) {
             if (bg_processes->processes[i].pid == pid) {
                 bg_processes->processes[i].state = FINISHED_STATE;
             }
         }
-        pthread_mutex_unlock(&bg_pids_mutex);
+        pthread_mutex_unlock(&bg_processes->mutex);
     }
 }
 
@@ -53,7 +53,7 @@ int exec_shell_cmd(struct cmdline *l) {
         exit(EXIT_SUCCESS);
     }
     if (strcmp(cmd[0], "jobs") == 0) {
-        pthread_mutex_lock(&bg_pids_mutex);
+        pthread_mutex_lock(&bg_processes->mutex);
         for (int i = 0; i < bg_processes->nb; i++) {
             printf("[%d] %d", i + 1, bg_processes->processes[i].pid);
             if (bg_processes->processes[i].state == RUNNING_STATE) {
@@ -69,11 +69,11 @@ int exec_shell_cmd(struct cmdline *l) {
 
             printf("\n");
         }
-        pthread_mutex_unlock(&bg_pids_mutex);
+        pthread_mutex_unlock(&bg_processes->mutex);
         return 1;
     }
     if (strcmp(cmd[0], "stop") == 0) {
-        pthread_mutex_lock(&bg_pids_mutex);
+        pthread_mutex_lock(&bg_processes->mutex);
         pid_t pid_to_stop;
         if (strncmp(cmd[1], "%", 1) == 0) { // cas de % donc id du job
             int job_id = atoi(cmd[1] + 1);
@@ -93,7 +93,7 @@ int exec_shell_cmd(struct cmdline *l) {
         } else {
             perror("kill");
         }
-        pthread_mutex_unlock(&bg_pids_mutex);
+        pthread_mutex_unlock(&bg_processes->mutex);
         return 1;
     }
     return 0;
@@ -194,7 +194,7 @@ void exec_cmd(struct cmdline *l) {
             }
         } else { // père
             if (l->bg) {
-                pthread_mutex_lock(&bg_pids_mutex);
+                pthread_mutex_lock(&bg_processes->mutex);
                 printf("[%d] %d\n", bg_processes->nb + 1, pids[i]);
 
                 char **cmd = l->seq[i];
@@ -214,7 +214,7 @@ void exec_cmd(struct cmdline *l) {
                 bg_processes->processes[bg_processes->nb].command[cmd_length] = NULL;
 
                 bg_processes->nb++;
-                pthread_mutex_unlock(&bg_pids_mutex);
+                pthread_mutex_unlock(&bg_processes->mutex);
             }
         }
     }
@@ -249,7 +249,7 @@ int main() {
     bg_processes = malloc(sizeof(ProcessesList));
     bg_processes->nb = 0;
 
-    pthread_mutex_init(&bg_pids_mutex, NULL);
+    pthread_mutex_init(&bg_processes->mutex, NULL);
 
 
     while (1) {
@@ -260,7 +260,7 @@ int main() {
 
         /* If input stream closed, normal termination */
         if (!l) {
-            pthread_mutex_destroy(&bg_pids_mutex);
+            pthread_mutex_destroy(&bg_processes->mutex);
 
             for (int i = 0; i < bg_processes->nb; i++) {
                 for (int j = 0; j < bg_processes->processes[i].cmd_size; j++) {
