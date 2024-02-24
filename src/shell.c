@@ -4,7 +4,17 @@
 #include "csapp.h"
 #include <pthread.h>
 
-pid_t *bg_pids;
+#define FINISHED_STATE 0
+#define RUNNING_STATE 1
+
+typedef struct {
+    pid_t pid;
+    int state;
+    char **command;
+    int cmd_size;
+} BackgroundProcess;
+
+BackgroundProcess *bg_processes;
 int nb_bg_pids;
 pthread_mutex_t bg_pids_mutex;
 
@@ -13,14 +23,10 @@ void handler_chld(int sig) {
     int status;
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
         pthread_mutex_lock(&bg_pids_mutex);
-        // suppresion des processus déja fini (pose problème avec synchronisation)
+        // mises à jours
         for (int i = 0; i < nb_bg_pids; i++) {
-            if (bg_pids[i] == pid) {
-                for (int j = i; j < nb_bg_pids - 1; j++) {
-                    bg_pids[j] = bg_pids[j + 1];
-                }
-                nb_bg_pids--;
-                break;
+            if (bg_processes[i].pid == pid) {
+                bg_processes[i].state = FINISHED_STATE;
             }
         }
         pthread_mutex_unlock(&bg_pids_mutex);
@@ -43,14 +49,33 @@ int exec_shell_cmd(struct cmdline *l) {
     }
     if (strcmp(cmd[0], "jobs") == 0) {
         pthread_mutex_lock(&bg_pids_mutex);
-        printf("\n%d processus en arrière plan\n", nb_bg_pids);
         for (int i = 0; i < nb_bg_pids; i++) {
-            printf("[%d] %d\n", i + 1, bg_pids[i]);
+            printf("[%d] %d", i + 1, bg_processes[i].pid);
+            if (bg_processes[i].state) {
+                printf(" En cours d'éxécution ");
+            } else {
+                printf(" Arrêté ");
+            }
+
+            char **c = bg_processes[i].command;
+            for (int j = 0; j < bg_processes[i].cmd_size; j++) {
+                printf("%s ", c[j]);
+            }
+
+            printf("\n");
         }
         pthread_mutex_unlock(&bg_pids_mutex);
         return 1;
     }
     return 0;
+}
+
+int cmd_size(char **cmd) {
+    int nb = 0;
+    while (cmd[nb] != NULL) {
+        nb++;
+    }
+    return nb;
 }
 
 int count_cmd(struct cmdline *l) {
@@ -142,8 +167,23 @@ void exec_cmd(struct cmdline *l) {
             if (l->bg) {
                 pthread_mutex_lock(&bg_pids_mutex);
                 printf("[%d] %d\n", i + 1, pids[i]);
-                bg_pids = realloc(bg_pids, (nb_bg_pids + 1) * sizeof(pid_t));
-                bg_pids[nb_bg_pids++] = pids[i];
+
+                char **cmd = l->seq[i];
+                int cmd_length = cmd_size(cmd);
+
+                bg_processes = realloc(bg_processes, (nb_bg_pids + 1) * sizeof(BackgroundProcess));
+                bg_processes[nb_bg_pids].command = malloc((cmd_length + 1) * sizeof(char *));
+
+                bg_processes[nb_bg_pids].pid = pids[i];
+                bg_processes[nb_bg_pids].state = RUNNING_STATE;
+                bg_processes[nb_bg_pids].cmd_size = cmd_length;
+
+                for (int j = 0; j < cmd_length; j++) {
+                    bg_processes[nb_bg_pids].command[j] = strdup(cmd[j]);
+                }
+                bg_processes[nb_bg_pids].command[cmd_length] = NULL;
+
+                nb_bg_pids++;
                 pthread_mutex_unlock(&bg_pids_mutex);
             }
         }
@@ -188,7 +228,16 @@ int main() {
         /* If input stream closed, normal termination */
         if (!l) {
             pthread_mutex_destroy(&bg_pids_mutex);
-            free(bg_pids);
+
+            for (int i = 0; i <= nb_bg_pids; i++) {
+                for (int j = 0; j <= bg_processes[i].cmd_size; j++) {
+                    free(bg_processes[i].command[j]);
+                }
+
+                free(bg_processes[i].command);
+            }
+
+            free(bg_processes);
             printf("exit\n");
             exit(EXIT_SUCCESS);
         }
