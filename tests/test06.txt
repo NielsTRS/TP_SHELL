@@ -1,4 +1,4 @@
 #
 # test06.txt - Pipes
 #
-sleep 10 | ls -a
+sleep 5 | ls -a

@@ -2,7 +2,7 @@
 # test09.txt - Jobs fg
 #
 make test
-./test > /dev/null &
+ls -a &
+SLEEP 1
 jobs
 fg %1
-INT
