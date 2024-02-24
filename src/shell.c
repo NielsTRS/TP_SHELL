@@ -106,54 +106,74 @@ int exec_shell_cmd(struct cmdline *l) {
     if (strcmp(cmd[0], "stop") == 0) {
         pthread_mutex_lock(&bg_processes->mutex);
         pid_t pid_to_stop;
-        if (strncmp(cmd[1], "%", 1) == 0) { // cas de % donc id du job
-            int job_id = atoi(cmd[1] + 1);
-            if (job_id > 0 && job_id <= bg_processes->nb) {
-                for (int i = 0; i < job_id; i++) {
-                    pid_to_stop = bg_processes->processes[i].pid;
+        if (cmd[1] != NULL) {
+            if (strncmp(cmd[1], "%", 1) == 0) { // cas de % donc id du job
+                int job_id = atoi(cmd[1] + 1);
+                if (job_id > 0 && job_id <= bg_processes->nb) {
+                    pid_to_stop = bg_processes->processes[job_id - 1].pid;
+                } else {
+                    printf("Identifiant invalide\n");
                 }
-            } else {
-                printf("Identifiant invalide\n");
+            } else { // cas du pid
+                pid_to_stop = atoi(cmd[1]);
             }
-        } else { // cas du pid
-            pid_to_stop = atoi(cmd[1]);
+
+            if (kill(pid_to_stop, SIGTERM) == 0) {
+                printf("Arrêt du processus %d en arrière-plan\n", pid_to_stop);
+            } else {
+                perror("kill");
+            }
+        } else {
+            printf("La commande stop prend 1 argument \n");
         }
 
-        if (kill(pid_to_stop, SIGTERM) == 0) {
-            printf("Arrêt du processus %d en arrière-plan\n", pid_to_stop);
-        } else {
-            perror("kill");
-        }
         pthread_mutex_unlock(&bg_processes->mutex);
         return 1;
     }
     if (strcmp(cmd[0], "fg") == 0) {
         pthread_mutex_lock(&bg_processes->mutex);
+        if (cmd[1] != NULL) {
+            if (bg_processes->nb > 0 && bg_processes->processes[bg_processes->nb - 1].state == RUNNING_STATE) {
+                Process *new;
+                if (strncmp(cmd[1], "%", 1) == 0) { // cas de % donc id du job
+                    int job_id = atoi(cmd[1] + 1);
+                    if (job_id > 0 && job_id <= bg_processes->nb) {
+                        new = &bg_processes->processes[job_id - 1];
+                    } else {
+                        printf("Identifiant invalide\n");
+                    }
+                } else { // cas du pid
+                    for (int i = 0; i < bg_processes->nb; i++) {
+                        if (bg_processes->processes[i].pid == atoi(cmd[1])) {
+                            new = &bg_processes->processes[i];
+                            break;
+                        }
+                    }
+                }
 
-        if (bg_processes->nb > 0 && bg_processes->processes[bg_processes->nb - 1].state == RUNNING_STATE) {
-            Process *new;
-            new = &bg_processes->processes[bg_processes->nb - 1];
+                // supprime le processus en arrière plan
+                for (int i = 0; i < bg_processes->nb - 1; i++) {
+                    bg_processes->processes[i] = bg_processes->processes[i + 1];
+                }
+                bg_processes->nb--;
 
-            // supprime le processus en arrière plan
-            for (int i = 0; i < bg_processes->nb - 1; i++) {
-                bg_processes->processes[i] = bg_processes->processes[i + 1];
+                // Ajoute le processus au premier plan
+                pthread_mutex_lock(&fg_processes->mutex);
+                fg_processes->processes = realloc(fg_processes->processes, (fg_processes->nb + 1) * sizeof(Process));
+                fg_processes->processes[fg_processes->nb] = *new;
+                fg_processes->nb++;
+                pthread_mutex_unlock(&fg_processes->mutex);
+
+                //Setpgid(new->pid, Getpgrp()); // renvoie une erreur permission refusée
+                waitpid(new->pid, NULL, 0);
+            } else {
+                printf("Aucune tache existante\n");
             }
-            bg_processes->nb--;
-
-            // Ajoute le processus au premier plan
-            pthread_mutex_lock(&fg_processes->mutex);
-            fg_processes->processes = realloc(fg_processes->processes, (fg_processes->nb + 1) * sizeof(Process));
-            fg_processes->processes[fg_processes->nb] = *new;
-            fg_processes->nb++;
-            pthread_mutex_unlock(&fg_processes->mutex);
-
-            //Setpgid(new->pid, Getpgrp()); // renvoie une erreur permission refusée
-            waitpid(new->pid, NULL, 0);
-
 
         } else {
-            printf("Aucune tache existante\n");
+            printf("La commande stop prend 1 argument \n");
         }
+
         pthread_mutex_unlock(&bg_processes->mutex);
         return 1;
     }
