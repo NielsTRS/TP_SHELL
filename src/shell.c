@@ -2,14 +2,17 @@
 #include <stdlib.h>
 #include "readcmd.h"
 #include "csapp.h"
+#include <pthread.h>
 
 pid_t *bg_pids;
-int nb_bg_pids = 0;
+int nb_bg_pids;
+pthread_mutex_t bg_pids_mutex;
 
 void handler_chld(int sig) {
     pid_t pid;
     int status;
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
+        pthread_mutex_lock(&bg_pids_mutex);
         // suppresion des processus déja fini (pose problème avec synchronisation)
         for (int i = 0; i < nb_bg_pids; i++) {
             if (bg_pids[i] == pid) {
@@ -20,6 +23,7 @@ void handler_chld(int sig) {
                 break;
             }
         }
+        pthread_mutex_unlock(&bg_pids_mutex);
     }
 }
 
@@ -38,10 +42,12 @@ int exec_shell_cmd(struct cmdline *l) {
         exit(EXIT_SUCCESS);
     }
     if (strcmp(cmd[0], "jobs") == 0) {
+        pthread_mutex_lock(&bg_pids_mutex);
         printf("\n%d processus en arrière plan\n", nb_bg_pids);
         for (int i = 0; i < nb_bg_pids; i++) {
             printf("[%d] %d\n", i + 1, bg_pids[i]);
         }
+        pthread_mutex_unlock(&bg_pids_mutex);
         return 1;
     }
     return 0;
@@ -134,9 +140,11 @@ void exec_cmd(struct cmdline *l) {
             }
         } else { // père
             if (l->bg) {
+                pthread_mutex_lock(&bg_pids_mutex);
                 printf("[%d] %d\n", i + 1, pids[i]);
                 bg_pids = realloc(bg_pids, (nb_bg_pids + 1) * sizeof(pid_t));
                 bg_pids[nb_bg_pids++] = pids[i];
+                pthread_mutex_unlock(&bg_pids_mutex);
             }
         }
     }
@@ -168,6 +176,9 @@ int main() {
     Signal(SIGINT, handler_stop);
     Signal(SIGTSTP, handler_suspend);
 
+    pthread_mutex_init(&bg_pids_mutex, NULL);
+    nb_bg_pids = 0;
+
     while (1) {
         struct cmdline *l;
 
@@ -176,6 +187,7 @@ int main() {
 
         /* If input stream closed, normal termination */
         if (!l) {
+            pthread_mutex_destroy(&bg_pids_mutex);
             free(bg_pids);
             printf("exit\n");
             exit(EXIT_SUCCESS);
