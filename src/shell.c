@@ -229,8 +229,8 @@ int main() {
         if (!l) {
             pthread_mutex_destroy(&bg_pids_mutex);
 
-            for (int i = 0; i <= nb_bg_pids; i++) {
-                for (int j = 0; j <= bg_processes[i].cmd_size; j++) {
+            for (int i = 0; i < nb_bg_pids; i++) {
+                for (int j = 0; j < bg_processes[i].cmd_size; j++) {
                     free(bg_processes[i].command[j]);
                 }
 
