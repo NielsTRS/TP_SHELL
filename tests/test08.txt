@@ -1,0 +1,8 @@
+#
+# test08.txt - Jobs stop
+#
+make test
+./test> /dev/null &
+SLEEP 5
+jobs
+stop %1

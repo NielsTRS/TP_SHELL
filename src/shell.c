@@ -165,7 +165,11 @@ int exec_shell_cmd(struct cmdline *l) {
                 pthread_mutex_unlock(&fg_processes->mutex);
 
                 //Setpgid(new->pid, Getpgrp()); // renvoie une erreur permission refusée
-                waitpid(new->pid, NULL, 0);
+                if (kill(new->pid, SIGCONT) == 0) {
+                    waitpid(new->pid, NULL, 0);
+                } else {
+                    printf("Erreur lors de la reprise du processus %d\n", new->pid);
+                }
             } else {
                 printf("Aucune tache existante\n");
             }

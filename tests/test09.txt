@@ -1,0 +1,8 @@
+#
+# test09.txt - Jobs fg
+#
+make test
+./test > /dev/null &
+jobs
+fg %1
+INT
