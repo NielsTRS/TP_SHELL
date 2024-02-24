@@ -6,6 +6,7 @@
 
 #define FINISHED_STATE 0
 #define RUNNING_STATE 1
+#define SUSPENDED_STATE -1
 
 typedef struct {
     pid_t pid;
@@ -21,7 +22,7 @@ typedef struct {
 } ProcessesList;
 
 ProcessesList *bg_processes;
-
+ProcessesList *fg_processes;
 
 void handler_chld(int sig) {
     pid_t pid;
@@ -31,19 +32,49 @@ void handler_chld(int sig) {
         // mises à jours
         for (int i = 0; i < bg_processes->nb; i++) {
             if (bg_processes->processes[i].pid == pid) {
-                bg_processes->processes[i].state = FINISHED_STATE;
+                if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                    bg_processes->processes[i].state = FINISHED_STATE;
+                } else if (WIFSTOPPED(status)) {
+                    bg_processes->processes[i].state = SUSPENDED_STATE;
+                }
             }
         }
         pthread_mutex_unlock(&bg_processes->mutex);
+
+        pthread_mutex_lock(&fg_processes->mutex);
+        // mises à jours
+        for (int i = 0; i < fg_processes->nb; i++) {
+            if (fg_processes->processes[i].pid == pid) {
+                if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                    fg_processes->processes[i].state = FINISHED_STATE;
+                } else if (WIFSTOPPED(status)) {
+                    fg_processes->processes[i].state = SUSPENDED_STATE;
+                }
+            }
+        }
+        pthread_mutex_unlock(&fg_processes->mutex);
     }
 }
 
+
 void handler_stop(int sig) {
+    pthread_mutex_lock(&fg_processes->mutex);
+    for (int i = 0; i < fg_processes->nb; i++) {
+        fg_processes->processes[i].state = FINISHED_STATE;
+        kill(fg_processes->processes[i].pid, SIGINT);
+    }
+    pthread_mutex_unlock(&fg_processes->mutex);
     printf("\n");
 }
 
 
 void handler_suspend(int sig) {
+    pthread_mutex_lock(&fg_processes->mutex);
+    for (int i = 0; i < fg_processes->nb; i++) {
+        fg_processes->processes[i].state = SUSPENDED_STATE;
+        kill(fg_processes->processes[i].pid, SIGTSTP);
+    }
+    pthread_mutex_unlock(&fg_processes->mutex);
     printf("\n");
 }
 
@@ -96,6 +127,37 @@ int exec_shell_cmd(struct cmdline *l) {
         pthread_mutex_unlock(&bg_processes->mutex);
         return 1;
     }
+    if (strcmp(cmd[0], "fg") == 0) {
+        pthread_mutex_lock(&bg_processes->mutex);
+
+        if (bg_processes->nb > 0 && bg_processes->processes[bg_processes->nb - 1].state == RUNNING_STATE) {
+            Process *new;
+            new = &bg_processes->processes[bg_processes->nb - 1];
+
+            // supprime le processus en arrière plan
+            for (int i = 0; i < bg_processes->nb - 1; i++) {
+                bg_processes->processes[i] = bg_processes->processes[i + 1];
+            }
+            bg_processes->nb--;
+
+            // Ajoute le processus au premier plan
+            pthread_mutex_lock(&fg_processes->mutex);
+            fg_processes->processes = realloc(fg_processes->processes, (fg_processes->nb + 1) * sizeof(Process));
+            fg_processes->processes[fg_processes->nb] = *new;
+            fg_processes->nb++;
+            pthread_mutex_unlock(&fg_processes->mutex);
+
+            //Setpgid(new->pid, Getpgrp()); // renvoie une erreur permission refusée
+            waitpid(new->pid, NULL, 0);
+
+
+        } else {
+            printf("Aucune tache existante\n");
+        }
+        pthread_mutex_unlock(&bg_processes->mutex);
+        return 1;
+    }
+
     return 0;
 }
 
@@ -182,7 +244,6 @@ void exec_cmd(struct cmdline *l) {
             }
 
             // changement de groupe
-            // A REVOIR !!!
             if (l->bg) {
                 Setpgid(0, 0);
             }
@@ -215,6 +276,27 @@ void exec_cmd(struct cmdline *l) {
 
                 bg_processes->nb++;
                 pthread_mutex_unlock(&bg_processes->mutex);
+            } else {
+                pthread_mutex_lock(&fg_processes->mutex);
+
+                char **cmd = l->seq[i];
+                int cmd_length = cmd_size(cmd);
+
+                fg_processes->processes = realloc(fg_processes->processes, (fg_processes->nb + 1) * sizeof(Process));
+                fg_processes->processes[fg_processes->nb].command = malloc((cmd_length + 1) * sizeof(char *));
+
+                fg_processes->processes[fg_processes->nb].pid = pids[i];
+                fg_processes->processes[fg_processes->nb].pid = pids[i];
+                fg_processes->processes[fg_processes->nb].state = RUNNING_STATE;
+                fg_processes->processes[fg_processes->nb].cmd_size = cmd_length;
+
+                for (int j = 0; j < cmd_length; j++) {
+                    fg_processes->processes[fg_processes->nb].command[j] = strdup(cmd[j]);
+                }
+                fg_processes->processes[fg_processes->nb].command[cmd_length] = NULL;
+
+                fg_processes->nb++;
+                pthread_mutex_unlock(&fg_processes->mutex);
             }
         }
     }
@@ -226,10 +308,11 @@ void exec_cmd(struct cmdline *l) {
         Close(pipes[i][1]);
     }
 
-    // A REVOIR !!!
     if (!l->bg) {
-        for (int i = 0; i < nb; i++) {
-            waitpid(pids[i], NULL, 0);
+        for (int i = 0; i < fg_processes->nb; i++) {
+            if (fg_processes->processes[i].state != SUSPENDED_STATE) {
+                waitpid(pids[i], NULL, 0);
+            }
         }
     }
 
@@ -248,8 +331,11 @@ int main() {
 
     bg_processes = malloc(sizeof(ProcessesList));
     bg_processes->nb = 0;
-
     pthread_mutex_init(&bg_processes->mutex, NULL);
+
+    fg_processes = malloc(sizeof(ProcessesList));
+    fg_processes->nb = 0;
+    pthread_mutex_init(&fg_processes->mutex, NULL);
 
 
     while (1) {
@@ -272,6 +358,21 @@ int main() {
 
             free(bg_processes->processes);
             free(bg_processes);
+
+
+            pthread_mutex_destroy(&fg_processes->mutex);
+
+            for (int i = 0; i < fg_processes->nb; i++) {
+                for (int j = 0; j < fg_processes->processes[i].cmd_size; j++) {
+                    free(fg_processes->processes[i].command[j]);
+                }
+
+                free(fg_processes->processes[i].command);
+            }
+
+            free(fg_processes->processes);
+            free(fg_processes);
+
             printf("exit\n");
             exit(EXIT_SUCCESS);
         }
