@@ -68,6 +68,7 @@ int exec_shell_cmd(struct cmdline *l) {
         return 1;
     }
     if (strcmp(cmd[0], "stop") == 0) {
+        pthread_mutex_lock(&bg_pids_mutex);
         pid_t pid_to_stop;
         if (strncmp(cmd[1], "%", 1) == 0) { // cas de % donc id du job
             int job_id = atoi(cmd[1] + 1);
@@ -87,6 +88,7 @@ int exec_shell_cmd(struct cmdline *l) {
         } else {
             perror("kill");
         }
+        pthread_mutex_unlock(&bg_pids_mutex);
         return 1;
     }
     return 0;
